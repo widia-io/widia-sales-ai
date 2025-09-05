@@ -3,7 +3,7 @@ package routes
 import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/google/uuid"
-	"github.com/widia/sales-ai/internal/domain"
+	"github.com/widia/widia-connect/internal/domain"
 	"gorm.io/gorm"
 )
 

@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/widia/sales-ai/internal/domain"
-	"github.com/widia/sales-ai/internal/interfaces/http/middleware"
+	"github.com/widia/widia-connect/internal/domain"
+	"github.com/widia/widia-connect/internal/interfaces/http/middleware"
 	"gorm.io/gorm"
 )
 

@@ -11,10 +11,10 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/spf13/viper"
-	"github.com/widia/sales-ai/internal/infrastructure/database"
-	"github.com/widia/sales-ai/internal/interfaces/http/handlers"
-	"github.com/widia/sales-ai/internal/interfaces/http/middleware"
-	"github.com/widia/sales-ai/internal/interfaces/http/routes"
+	"github.com/widia/widia-connect/internal/infrastructure/database"
+	"github.com/widia/widia-connect/internal/interfaces/http/handlers"
+	"github.com/widia/widia-connect/internal/interfaces/http/middleware"
+	"github.com/widia/widia-connect/internal/interfaces/http/routes"
 )
 
 func init() {

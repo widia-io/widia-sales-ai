@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/spf13/viper"
-	"github.com/widia/sales-ai/internal/domain"
+	"github.com/widia/widia-connect/internal/domain"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
