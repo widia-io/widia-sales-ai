@@ -96,8 +96,11 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        user: state.user,
+        tenant: state.tenant,
         token: state.token,
         refreshToken: state.refreshToken,
+        isAuthenticated: state.isAuthenticated,
       }),
     }
   )
