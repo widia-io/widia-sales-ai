@@ -1,0 +1,168 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: saas-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: saas_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saas-network
+
+  # Redis for caching and queues
+  redis:
+    image: redis:7-alpine
+    container_name: saas-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saas-network
+
+  # Chatwoot for chat/support
+  chatwoot:
+    image: chatwoot/chatwoot:latest
+    container_name: saas-chatwoot
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3001:3000"
+    environment:
+      RAILS_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: postgres
+      POSTGRES_PASSWORD: postgres
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY_BASE: replace_with_your_secret_key_base
+      FRONTEND_URL: http://localhost:3001
+      INSTALLATION_ENV: docker
+    networks:
+      - saas-network
+
+  # MinIO for S3-compatible storage
+  minio:
+    image: minio/minio:latest
+    container_name: saas-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - saas-network
+
+  # Metabase for analytics
+  metabase:
+    image: metabase/metabase:latest
+    container_name: saas-metabase
+    depends_on:
+      - postgres
+    ports:
+      - "3002:3000"
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: postgres
+      MB_DB_PASS: postgres
+      MB_DB_HOST: postgres
+    volumes:
+      - metabase_data:/metabase-data
+    networks:
+      - saas-network
+
+  # Mailhog for email testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: saas-mailhog
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+    networks:
+      - saas-network
+
+  # Comentado até que estejam prontos para build
+  # # Backend API (Go)
+  # backend:
+  #   build:
+  #     context: ../backend
+  #     dockerfile: Dockerfile
+  #   container_name: saas-backend
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     PORT: 3000
+  #     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/saas_dev?sslmode=disable
+  #     REDIS_URL: redis://redis:6379
+  #     JWT_SECRET: your-secret-key-change-in-production
+  #     ENV: development
+  #     CORS_ORIGINS: http://localhost:3003,http://localhost:3000
+  #   volumes:
+  #     - ../backend:/app
+  #     - /app/bin
+  #   command: air -c .air.toml
+  #   networks:
+  #     - saas-network
+
+  # # Frontend (Next.js)
+  # frontend:
+  #   build:
+  #     context: ../frontend
+  #     dockerfile: Dockerfile
+  #   container_name: saas-frontend
+  #   depends_on:
+  #     - backend
+  #   ports:
+  #     - "3003:3000"
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://backend:3000
+  #     NODE_ENV: development
+  #   volumes:
+  #     - ../frontend:/app
+  #     - /app/node_modules
+  #     - /app/.next
+  #   command: npm run dev
+  #   networks:
+  #     - saas-network
+
+networks:
+  saas-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  metabase_data:
