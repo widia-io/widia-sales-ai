@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,3 +42,26 @@ type TenantService interface {
 
 // JSON type for JSONB fields
 type JSON map[string]interface{}
+
+// Scan implements the sql.Scanner interface
+func (j *JSON) Scan(value interface{}) error {
+	if value == nil {
+		*j = make(map[string]interface{})
+		return nil
+	}
+	
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("cannot scan %T into JSON", value)
+	}
+	
+	return json.Unmarshal(bytes, j)
+}
+
+// Value implements the driver.Valuer interface
+func (j JSON) Value() (driver.Value, error) {
+	if j == nil {
+		return "{}", nil
+	}
+	return json.Marshal(j)
+}

@@ -42,11 +42,12 @@ func (u *User) CheckPassword(password string) bool {
 type UserRepository interface {
 	Create(user *User) error
 	FindByID(id uuid.UUID) (*User, error)
-	FindByEmail(tenantID uuid.UUID, email string) (*User, error)
-	FindAllByTenant(tenantID uuid.UUID) ([]User, error)
+	FindByEmail(email string) (*User, error)
+	FindByEmailAndTenant(email string, tenantID uuid.UUID) (*User, error)
+	FindByTenant(tenantID uuid.UUID) ([]*User, error)
 	Update(user *User) error
 	Delete(id uuid.UUID) error
-	UpdateLastLogin(id uuid.UUID) error
+	CountByTenant(tenantID uuid.UUID) (int64, error)
 }
 
 type UserService interface {
