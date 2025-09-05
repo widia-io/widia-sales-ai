@@ -30,6 +30,10 @@ type TenantRepository interface {
 	FindByDomain(domain string) (*Tenant, error)
 	Update(tenant *Tenant) error
 	Delete(id uuid.UUID) error
+	List(limit, offset int) ([]*Tenant, error)
+	Count() (int64, error)
+	ExistsBySlug(slug string) (bool, error)
+	ExistsByDomain(domain string) (bool, error)
 }
 
 type TenantService interface {

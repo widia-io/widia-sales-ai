@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/viper"
 	"github.com/widia/widia-connect/internal/infrastructure/database"
 	"github.com/widia/widia-connect/internal/interfaces/http/handlers"
-	"github.com/widia/widia-connect/internal/interfaces/http/middleware"
 	"github.com/widia/widia-connect/internal/interfaces/http/routes"
 )
 
@@ -76,12 +75,9 @@ func main() {
 	// Public routes
 	routes.SetupAuthRoutes(api, db)
 	
-	// Protected routes (with tenant middleware)
-	protected := api.Use(middleware.AuthMiddleware(db))
-	protected.Use(middleware.TenantMiddleware(db))
-	
-	routes.SetupTenantRoutes(protected, db)
-	routes.SetupUserRoutes(protected, db)
+	// Protected routes - pass api group, routes will handle their own middleware
+	routes.SetupTenantRoutes(api, db)
+	routes.SetupUserRoutes(api, db)
 	
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)

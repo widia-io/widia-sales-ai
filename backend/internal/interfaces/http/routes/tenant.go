@@ -2,44 +2,62 @@ package routes
 
 import (
 	"github.com/gofiber/fiber/v3"
-	"github.com/google/uuid"
-	"github.com/widia/widia-connect/internal/domain"
+	"github.com/widia/widia-connect/internal/application"
+	"github.com/widia/widia-connect/internal/infrastructure/repository"
+	"github.com/widia/widia-connect/internal/interfaces/http/middleware"
 	"gorm.io/gorm"
 )
 
 func SetupTenantRoutes(router fiber.Router, db *gorm.DB) {
-	tenant := router.Group("/tenant")
+	// Initialize repositories and services
+	tenantRepo := repository.NewTenantRepository(db)
+	userRepo := repository.NewUserRepository(db)
+	tenantService := application.NewTenantService(db, tenantRepo, userRepo)
 	
-	// Get current tenant
+	// All tenant routes require authentication
+	tenant := router.Group("/tenant", middleware.AuthMiddleware(db))
+	
+	// Get current tenant information
 	tenant.Get("/", func(c fiber.Ctx) error {
-		tenantID := c.Locals("tenant_id").(uuid.UUID)
-		
-		var tenant domain.Tenant
-		if err := db.First(&tenant, tenantID).Error; err != nil {
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": "Tenant not found",
+		tenantID, err := middleware.GetTenantID(c)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Tenant ID not found",
 			})
 		}
 		
-		return c.JSON(tenant)
+		tenantData, err := tenantService.GetTenant(tenantID)
+		if err != nil {
+			if err == application.ErrTenantNotFound {
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "Tenant not found",
+				})
+			}
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to get tenant",
+			})
+		}
+		
+		return c.JSON(tenantData)
 	})
 	
-	// Update tenant
-	tenant.Patch("/", func(c fiber.Ctx) error {
-		tenantID := c.Locals("tenant_id").(uuid.UUID)
-		role := c.Locals("role").(string)
-		
-		// Only admins can update tenant
-		if role != "admin" {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "Insufficient permissions",
+	// Admin-only routes group
+	adminTenant := tenant.Group("/")
+	adminTenant.Use(middleware.RequireAdmin())
+	
+	// Update tenant (admin only)
+	adminTenant.Patch("/", func(c fiber.Ctx) error {
+		tenantID, err := middleware.GetTenantID(c)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Tenant ID not found",
 			})
 		}
 		
 		var updates map[string]interface{}
 		if err := c.Bind().JSON(&updates); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid request",
+				"error": "Invalid request body",
 			})
 		}
 		
@@ -47,16 +65,50 @@ func SetupTenantRoutes(router fiber.Router, db *gorm.DB) {
 		delete(updates, "id")
 		delete(updates, "slug")
 		delete(updates, "created_at")
+		delete(updates, "updated_at")
+		delete(updates, "deleted_at")
 		
-		if err := db.Model(&domain.Tenant{}).Where("id = ?", tenantID).Updates(updates).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to update tenant",
+		updatedTenant, err := tenantService.UpdateTenant(tenantID, updates)
+		if err != nil {
+			switch err {
+			case application.ErrTenantNotFound:
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "Tenant not found",
+				})
+			case application.ErrInvalidDomain:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid domain format",
+				})
+			case application.ErrTenantDomainExists:
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"error": "Domain already exists",
+				})
+			default:
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": err.Error(),
+				})
+			}
+		}
+		
+		return c.JSON(updatedTenant)
+	})
+	
+	// Get tenant statistics (admin only)
+	adminTenant.Get("/stats", func(c fiber.Ctx) error {
+		tenantID, err := middleware.GetTenantID(c)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "Tenant ID not found",
 			})
 		}
 		
-		var tenant domain.Tenant
-		db.First(&tenant, tenantID)
+		stats, err := tenantService.GetTenantStats(tenantID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to get tenant statistics",
+			})
+		}
 		
-		return c.JSON(tenant)
+		return c.JSON(stats)
 	})
 }

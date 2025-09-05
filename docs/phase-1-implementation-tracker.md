@@ -56,28 +56,28 @@
   - [ ] User tracking
 
 ### 2️⃣ Backend - Serviços e Repositórios
-**Prazo:** 2 dias | **Status:** ⏸️ Pendente
+**Prazo:** 2 dias | **Status:** ✅ Concluído
 
-- [ ] TenantService
-  - [ ] CreateTenant
-  - [ ] GetTenant
-  - [ ] UpdateTenant
-  - [ ] DeleteTenant (soft)
-  - [ ] GetTenantBySlug
+- [x] TenantService
+  - [x] CreateTenant
+  - [x] GetTenant
+  - [x] UpdateTenant
+  - [x] DeleteTenant (soft)
+  - [x] GetTenantBySlug
 
-- [ ] UserService
-  - [ ] CreateUser
-  - [ ] GetUser
-  - [ ] UpdateUser
-  - [ ] DeleteUser
-  - [ ] ListUsers
-  - [ ] ChangePassword
+- [x] UserService
+  - [x] CreateUser
+  - [x] GetUser
+  - [x] UpdateUser
+  - [x] DeleteUser
+  - [x] ListUsers
+  - [x] ChangePassword
 
-- [ ] Repository Pattern
-  - [ ] BaseRepository
-  - [ ] TenantRepository
-  - [ ] UserRepository
-  - [ ] Transações
+- [x] Repository Pattern
+  - [ ] BaseRepository (opcional)
+  - [x] TenantRepository
+  - [x] UserRepository
+  - [x] Transações
 
 - [ ] Use Cases
   - [ ] RegisterTenantUseCase
@@ -282,7 +282,7 @@
 
 ### Por Categoria
 - **Backend Auth:** 4/6 tarefas (67%)
-- **Backend Services:** 0/6 tarefas (0%)
+- **Backend Services:** 5/6 tarefas (83%)
 - **Backend API:** 0/5 tarefas (0%)
 - **Frontend Setup:** 0/5 tarefas (0%)
 - **Frontend Auth:** 0/5 tarefas (0%)
@@ -291,10 +291,10 @@
 - **DevOps:** 0/4 tarefas (0%)
 
 ### Total Geral
-- **Tarefas Concluídas:** 11/49
-- **Em Progresso:** 2
-- **Pendentes:** 36
-- **Progresso Total:** ~27%
+- **Tarefas Concluídas:** 16/49
+- **Em Progresso:** 1
+- **Pendentes:** 32
+- **Progresso Total:** ~33%
 
 ---
 

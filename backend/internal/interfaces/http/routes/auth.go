@@ -1,8 +1,6 @@
 package routes
 
 import (
-	"time"
-
 	"github.com/gofiber/fiber/v3"
 	"github.com/widia/widia-connect/internal/application"
 	"github.com/widia/widia-connect/internal/domain"
@@ -17,7 +15,11 @@ func SetupAuthRoutes(router fiber.Router, db *gorm.DB) {
 	// Initialize repositories and services
 	userRepo := repository.NewUserRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+	tenantRepo := repository.NewTenantRepository(db)
+	
 	authService := application.NewAuthService(db, userRepo, refreshTokenRepo)
+	tenantService := application.NewTenantService(db, tenantRepo, userRepo)
+	userService := application.NewUserService(db, userRepo)
 	
 	// Register new tenant
 	auth.Post("/register", func(c fiber.Ctx) error {
@@ -35,67 +37,63 @@ func SetupAuthRoutes(router fiber.Router, db *gorm.DB) {
 			})
 		}
 		
-		// Check if tenant slug exists
-		var existingTenant domain.Tenant
-		if err := db.Where("slug = ?", req.TenantSlug).First(&existingTenant).Error; err == nil {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
-				"error": "Tenant slug already exists",
+		// Validate required fields
+		if req.TenantName == "" || req.TenantSlug == "" || req.Email == "" || req.Password == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Missing required fields",
 			})
 		}
 		
-		// Create tenant
-		tenant := domain.Tenant{
-			Name: req.TenantName,
-			Slug: req.TenantSlug,
-			Settings: domain.JSON{
-				"onboarding_completed": false,
-			},
-			SubscriptionStatus: "trial",
+		// Create tenant and admin user
+		tenant, user, err := tenantService.CreateTenant(
+			req.TenantName,
+			req.TenantSlug,
+			req.Email,
+			req.Password,
+			req.Name,
+		)
+		
+		if err != nil {
+			// Handle specific errors
+			switch err {
+			case application.ErrInvalidSlug:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid slug format. Must be lowercase, alphanumeric with hyphens, 3-63 characters",
+				})
+			case application.ErrTenantSlugExists:
+				return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+					"error": "Tenant slug already exists",
+				})
+			default:
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": err.Error(),
+				})
+			}
 		}
 		
-		trialEnd := time.Now().Add(14 * 24 * time.Hour)
-		tenant.SubscriptionEndsAt = &trialEnd
-		
-		if err := db.Create(&tenant).Error; err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to create tenant",
-			})
-		}
-		
-		// Create admin user
-		user := domain.User{
-			TenantID: tenant.ID,
-			Email:    req.Email,
-			Name:     req.Name,
-			Role:     "admin",
-		}
-		
-		if err := user.SetPassword(req.Password); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to hash password",
-			})
-		}
-		
-		if err := db.Create(&user).Error; err != nil {
-			// Rollback tenant creation
-			db.Delete(&tenant)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to create user",
-			})
-		}
-		
-		// Generate token
-		token, err := middleware.GenerateToken(user.ID, tenant.ID, user.Email, user.Role)
+		// Generate tokens
+		accessToken, err := middleware.GenerateToken(user.ID, tenant.ID, user.Email, user.Role)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to generate token",
 			})
 		}
 		
+		refreshToken, err := authService.CreateRefreshToken(user.ID)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to generate refresh token",
+			})
+		}
+		
+		// Update last login
+		userService.UpdateLastLogin(user.ID)
+		
 		return c.JSON(fiber.Map{
-			"token":  token,
-			"user":   user,
-			"tenant": tenant,
+			"token":         accessToken,
+			"refresh_token": refreshToken.Token,
+			"user":          user,
+			"tenant":        tenant,
 		})
 	})
 	
