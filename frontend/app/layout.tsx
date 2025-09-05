@@ -6,8 +6,8 @@ import { Providers } from '@/components/providers'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'SaaS Sales AI - Assistente de Vendas Inteligente',
-  description: 'Transforme sua prospecção em um processo automatizado e eficiente',
+  title: 'Widia Connect - Assistente de Vendas Inteligente',
+  description: 'Transforme sua prospecção em um processo automatizado e eficiente com Widia Connect',
 }
 
 export default function RootLayout({

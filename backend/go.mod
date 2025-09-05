@@ -1,4 +1,4 @@
-module github.com/widia/sales-ai
+module github.com/widia/widia-connect
 
 go 1.21
 
