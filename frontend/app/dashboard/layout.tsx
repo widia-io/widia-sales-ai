@@ -44,13 +44,7 @@ export default function DashboardLayout({
   const router = useRouter()
   const { toast } = useToast()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const { user, tenant, logout: logoutStore, isAuthenticated, refreshToken } = useAuthStore()
-  
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/auth/login')
-    }
-  }, [isAuthenticated, router])
+  const { user, tenant, logout: logoutStore, refreshToken } = useAuthStore()
   
   const handleLogout = async () => {
     try {
@@ -78,8 +72,13 @@ export default function DashboardLayout({
       .slice(0, 2)
   }
   
-  if (!isAuthenticated || !user || !tenant) {
-    return null // or a loading spinner
+  // Wait for auth data to be available
+  if (!user || !tenant) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">Carregando...</div>
+      </div>
+    )
   }
   
   const isAdmin = user.role === 'admin' || user.role === 'owner'
