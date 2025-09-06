@@ -51,8 +51,19 @@ class UserService {
 
   // Get user statistics
   async getUserStats(): Promise<UserStats> {
-    const response = await apiClient.get<UserStats>('/tenant/users/stats')
-    return response.data
+    const response = await apiClient.get<any>('/tenant/users/stats')
+    // Map backend response to frontend format
+    return {
+      total_users: response.data.total || 0,
+      active_users: response.data.active || 0,
+      users_by_role: {
+        owner: response.data.by_role?.owner || 0,
+        admin: response.data.by_role?.admin || 0,
+        agent: response.data.by_role?.agent || 0,
+        viewer: response.data.by_role?.viewer || 0,
+      },
+      recent_signups: 0
+    }
   }
 
   // Get a specific user

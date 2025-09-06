@@ -45,8 +45,22 @@ class TenantService {
 
   // Get tenant statistics
   async getTenantStats(): Promise<TenantStats> {
-    const response = await apiClient.get<TenantStats>('/tenant/stats')
-    return response.data
+    const [tenantResponse, userStatsResponse] = await Promise.all([
+      apiClient.get<any>('/tenant/stats'),
+      apiClient.get<any>('/tenant/users/stats').catch(() => ({ data: {} }))
+    ])
+    
+    return {
+      user_count: tenantResponse.data.user_count || 0,
+      active_users: userStatsResponse.data?.active || tenantResponse.data.user_count || 0,
+      storage_used: tenantResponse.data.storage_used || 0,
+      api_calls_month: tenantResponse.data.api_calls_month || 0,
+      messages_sent: tenantResponse.data.messages_sent || 0,
+      days_remaining: tenantResponse.data.days_remaining || 0,
+      subscription_status: tenantResponse.data.subscription_status || 'trial',
+      subscription_ends_at: tenantResponse.data.subscription_ends_at || '',
+      created_at: tenantResponse.data.created_at || ''
+    }
   }
 
   // Update tenant name
