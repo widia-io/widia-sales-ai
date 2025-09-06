@@ -1,6 +1,8 @@
 package application
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -11,17 +13,21 @@ import (
 )
 
 var (
-	ErrInvalidRefreshToken = errors.New("invalid refresh token")
-	ErrTokenExpired        = errors.New("refresh token expired")
-	ErrUserNotFound        = errors.New("user not found")
-	ErrInvalidCredentials  = errors.New("invalid credentials")
+	ErrInvalidRefreshToken  = errors.New("invalid refresh token")
+	ErrTokenExpired         = errors.New("refresh token expired")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrInvalidCredentials   = errors.New("invalid credentials")
+	ErrInvalidResetToken    = errors.New("invalid or expired reset token")
+	ErrResetTokenUsed       = errors.New("reset token already used")
 )
 
 type AuthService struct {
 	db                     *gorm.DB
 	userRepo               domain.UserRepository
 	refreshTokenRepo       domain.RefreshTokenRepository
+	resetTokenRepo         domain.PasswordResetTokenRepository
 	refreshTokenExpiration time.Duration
+	resetTokenExpiration   time.Duration
 }
 
 func NewAuthService(
@@ -34,6 +40,24 @@ func NewAuthService(
 		userRepo:               userRepo,
 		refreshTokenRepo:       refreshTokenRepo,
 		refreshTokenExpiration: 7 * 24 * time.Hour, // 7 days
+		resetTokenExpiration:   1 * time.Hour,       // 1 hour
+	}
+}
+
+// NewAuthServiceWithResetToken creates an AuthService with reset token support
+func NewAuthServiceWithResetToken(
+	db *gorm.DB,
+	userRepo domain.UserRepository,
+	refreshTokenRepo domain.RefreshTokenRepository,
+	resetTokenRepo domain.PasswordResetTokenRepository,
+) *AuthService {
+	return &AuthService{
+		db:                     db,
+		userRepo:               userRepo,
+		refreshTokenRepo:       refreshTokenRepo,
+		resetTokenRepo:         resetTokenRepo,
+		refreshTokenExpiration: 7 * 24 * time.Hour, // 7 days
+		resetTokenExpiration:   1 * time.Hour,       // 1 hour
 	}
 }
 
@@ -173,4 +197,134 @@ func (s *AuthService) RevokeAllUserTokens(userID uuid.UUID) error {
 // CleanupExpiredTokens removes expired and old revoked tokens
 func (s *AuthService) CleanupExpiredTokens() error {
 	return s.refreshTokenRepo.DeleteExpired()
+}
+
+// RequestPasswordReset creates a password reset token for a user
+func (s *AuthService) RequestPasswordReset(email string, tenantSlug string) (string, error) {
+	// Find tenant by slug
+	var tenant domain.Tenant
+	if err := s.db.Where("slug = ?", tenantSlug).First(&tenant).Error; err != nil {
+		// Don't reveal if tenant exists
+		return "", nil
+	}
+	
+	// Find user by email and tenant
+	user, err := s.userRepo.FindByEmailAndTenant(email, tenant.ID)
+	if err != nil {
+		// Don't reveal if user exists
+		return "", nil
+	}
+	
+	// Check if user is active
+	if !user.IsActive {
+		return "", nil
+	}
+	
+	// Invalidate existing tokens for this user
+	if s.resetTokenRepo != nil {
+		s.resetTokenRepo.InvalidateUserTokens(user.ID)
+	}
+	
+	// Generate secure random token
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(tokenBytes)
+	
+	// Create reset token
+	resetToken := &domain.PasswordResetToken{
+		ID:        uuid.New(),
+		UserID:    user.ID,
+		Token:     token,
+		ExpiresAt: time.Now().Add(s.resetTokenExpiration),
+		Used:      false,
+	}
+	
+	if s.resetTokenRepo != nil {
+		if err := s.resetTokenRepo.Create(resetToken); err != nil {
+			return "", err
+		}
+	}
+	
+	return token, nil
+}
+
+// ResetPassword resets a user's password using a valid reset token
+func (s *AuthService) ResetPassword(token string, newPassword string) error {
+	if s.resetTokenRepo == nil {
+		return errors.New("password reset not configured")
+	}
+	
+	// Find the reset token
+	resetToken, err := s.resetTokenRepo.GetByToken(token)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrInvalidResetToken
+		}
+		return err
+	}
+	
+	// Check if token is valid
+	if !resetToken.IsValid() {
+		if resetToken.Used {
+			return ErrResetTokenUsed
+		}
+		return ErrInvalidResetToken
+	}
+	
+	// Get the user
+	user, err := s.userRepo.FindByID(resetToken.UserID)
+	if err != nil {
+		return ErrUserNotFound
+	}
+	
+	// Validate password
+	if len(newPassword) < 8 {
+		return ErrInvalidPassword
+	}
+	
+	// Update user password
+	if err := user.SetPassword(newPassword); err != nil {
+		return err
+	}
+	
+	// Save user with new password
+	if err := s.userRepo.Update(user); err != nil {
+		return err
+	}
+	
+	// Mark token as used
+	if err := s.resetTokenRepo.MarkAsUsed(resetToken.ID); err != nil {
+		return err
+	}
+	
+	// Revoke all refresh tokens for security
+	s.refreshTokenRepo.RevokeAllForUser(user.ID)
+	
+	return nil
+}
+
+// ValidateResetToken checks if a reset token is valid
+func (s *AuthService) ValidateResetToken(token string) error {
+	if s.resetTokenRepo == nil {
+		return errors.New("password reset not configured")
+	}
+	
+	resetToken, err := s.resetTokenRepo.GetByToken(token)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrInvalidResetToken
+		}
+		return err
+	}
+	
+	if !resetToken.IsValid() {
+		if resetToken.Used {
+			return ErrResetTokenUsed
+		}
+		return ErrInvalidResetToken
+	}
+	
+	return nil
 }
