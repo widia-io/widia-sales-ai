@@ -25,6 +25,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 
 export default function UsersPage() {
@@ -37,6 +45,14 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+  const [formData, setFormData] = useState<CreateUserRequest>({
+    email: '',
+    name: '',
+    password: '',
+    role: 'agent',
+  })
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
+  const [newPassword, setNewPassword] = useState('')
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery({
@@ -80,6 +96,75 @@ export default function UsersPage() {
         description: 'O status do usuário foi atualizado.',
       })
       queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+
+  // Create user mutation
+  const createMutation = useMutation({
+    mutationFn: userService.createUser,
+    onSuccess: () => {
+      toast({
+        title: 'Usuário criado',
+        description: 'O usuário foi criado com sucesso.',
+      })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['userStats'] })
+      setShowCreateModal(false)
+      setFormData({
+        email: '',
+        name: '',
+        password: '',
+        role: 'agent',
+      })
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Erro ao criar usuário',
+        description: error.response?.data?.message || 'Não foi possível criar o usuário.',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  // Update user mutation
+  const updateMutation = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: Partial<User> }) =>
+      userService.updateUser(userId, data),
+    onSuccess: () => {
+      toast({
+        title: 'Usuário atualizado',
+        description: 'O usuário foi atualizado com sucesso.',
+      })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setEditingUser(null)
+    },
+    onError: () => {
+      toast({
+        title: 'Erro ao atualizar usuário',
+        description: 'Não foi possível atualizar o usuário.',
+        variant: 'destructive',
+      })
+    },
+  })
+
+  // Reset password mutation
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ userId, password }: { userId: string; password: string }) =>
+      userService.resetUserPassword(userId, password),
+    onSuccess: () => {
+      toast({
+        title: 'Senha redefinida',
+        description: 'A senha do usuário foi redefinida com sucesso.',
+      })
+      setResetPasswordUser(null)
+      setNewPassword('')
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Erro ao redefinir senha',
+        description: error.response?.data?.message || 'Não foi possível redefinir a senha.',
+        variant: 'destructive',
+      })
     },
   })
 
@@ -318,7 +403,13 @@ export default function UsersPage() {
                               </>
                             )}
                           </DropdownMenuItem>
-                          <DropdownMenuItem disabled={user.id === currentUser?.id}>
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setResetPasswordUser(user)
+                              setNewPassword('')
+                            }}
+                            disabled={user.id === currentUser?.id}
+                          >
                             <Key className="h-4 w-4 mr-2" />
                             Resetar Senha
                           </DropdownMenuItem>
@@ -341,6 +432,211 @@ export default function UsersPage() {
           </table>
         </div>
       </div>
+
+      {/* Create User Modal */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo Usuário</DialogTitle>
+            <DialogDescription>
+              Crie um novo usuário para sua organização
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="create-name">Nome Completo</Label>
+              <Input
+                id="create-name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="João Silva"
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-email">Email</Label>
+              <Input
+                id="create-email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="joao@exemplo.com"
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-password">Senha</Label>
+              <Input
+                id="create-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Mínimo 8 caracteres"
+              />
+            </div>
+            <div>
+              <Label htmlFor="create-role">Perfil</Label>
+              <select
+                id="create-role"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+              >
+                <option value="agent">Agente</option>
+                <option value="admin">Administrador</option>
+                <option value="viewer">Visualizador</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => createMutation.mutate(formData)}
+              disabled={createMutation.isPending || !formData.email || !formData.name || !formData.password}
+            >
+              Criar Usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Modal */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+            <DialogDescription>
+              Atualize as informações do usuário
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-name">Nome Completo</Label>
+              <Input
+                id="edit-name"
+                value={editingUser?.name || ''}
+                onChange={(e) =>
+                  setEditingUser(editingUser ? { ...editingUser, name: e.target.value } : null)
+                }
+                placeholder="João Silva"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editingUser?.email || ''}
+                onChange={(e) =>
+                  setEditingUser(editingUser ? { ...editingUser, email: e.target.value } : null)
+                }
+                placeholder="joao@exemplo.com"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-role">Perfil</Label>
+              <select
+                id="edit-role"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                value={editingUser?.role || 'agent'}
+                onChange={(e) =>
+                  setEditingUser(editingUser ? { ...editingUser, role: e.target.value as any } : null)
+                }
+              >
+                <option value="agent">Agente</option>
+                <option value="admin">Administrador</option>
+                <option value="viewer">Visualizador</option>
+                {editingUser?.role === 'owner' && <option value="owner">Proprietário</option>}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingUser(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingUser) {
+                  updateMutation.mutate({
+                    userId: editingUser.id,
+                    data: {
+                      name: editingUser.name,
+                      email: editingUser.email,
+                      role: editingUser.role,
+                    },
+                  })
+                }
+              }}
+              disabled={updateMutation.isPending}
+            >
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Modal */}
+      <Dialog open={!!resetPasswordUser} onOpenChange={(open) => !open && setResetPasswordUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resetar Senha</DialogTitle>
+            <DialogDescription>
+              Defina uma nova senha para o usuário {resetPasswordUser?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="reset-user">Usuário</Label>
+              <Input
+                id="reset-user"
+                value={resetPasswordUser?.email || ''}
+                disabled
+                className="bg-gray-50"
+              />
+            </div>
+            <div>
+              <Label htmlFor="reset-password">Nova Senha</Label>
+              <Input
+                id="reset-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                A senha deve ter pelo menos 8 caracteres
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setResetPasswordUser(null)
+              setNewPassword('')
+            }}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (resetPasswordUser && newPassword.length >= 8) {
+                  resetPasswordMutation.mutate({
+                    userId: resetPasswordUser.id,
+                    password: newPassword,
+                  })
+                } else if (newPassword.length < 8) {
+                  toast({
+                    title: 'Senha muito curta',
+                    description: 'A senha deve ter pelo menos 8 caracteres.',
+                    variant: 'destructive',
+                  })
+                }
+              }}
+              disabled={resetPasswordMutation.isPending || !newPassword || newPassword.length < 8}
+            >
+              Redefinir Senha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

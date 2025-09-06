@@ -78,11 +78,6 @@ class UserService {
     await apiClient.delete(`/tenant/users/${userId}`)
   }
 
-  // Reset user password (admin action)
-  async resetUserPassword(userId: string, password: string): Promise<void> {
-    await apiClient.post(`/tenant/users/${userId}/reset-password`, { password })
-  }
-
   // Activate user
   async activateUser(userId: string): Promise<User> {
     return this.updateUser(userId, { is_active: true })
@@ -96,6 +91,14 @@ class UserService {
   // Change user role
   async changeUserRole(userId: string, role: 'admin' | 'agent' | 'viewer'): Promise<User> {
     return this.updateUser(userId, { role })
+  }
+
+  // Reset user password
+  async resetUserPassword(userId: string, newPassword: string): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>(`/tenant/users/${userId}/reset-password`, {
+      password: newPassword,
+    })
+    return response.data
   }
 }
 
