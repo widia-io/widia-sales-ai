@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 
 // Public routes that don't require authentication
 const publicRoutes = [
+  '/',
   '/auth/login',
   '/auth/register',
   '/auth/forgot-password',
@@ -50,14 +51,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
   
-  // Redirect root to dashboard or login
-  if (pathname === '/') {
-    if (isAuthenticated) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    } else {
-      return NextResponse.redirect(new URL('/auth/login', request.url))
-    }
-  }
+  // Don't redirect root anymore - let it show the landing page
+  // The landing page itself has login/register buttons
   
   return NextResponse.next()
 }
