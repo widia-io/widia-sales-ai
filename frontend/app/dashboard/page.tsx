@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   Users, 
   Calendar, 
@@ -23,6 +24,7 @@ interface TenantStats {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const { user, tenant } = useAuthStore()
   const [stats, setStats] = useState<TenantStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -245,15 +247,24 @@ export default function DashboardPage() {
           Ações Rápidas
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="bg-gray-800 hover:bg-gray-700 text-white rounded-lg p-4 flex items-center gap-3 transition-colors">
+          <button 
+            onClick={() => router.push('/dashboard/users?action=new')}
+            className="bg-gray-800 hover:bg-gray-700 text-white rounded-lg p-4 flex items-center gap-3 transition-colors"
+          >
             <UserPlus className="h-5 w-5" />
             <span className="font-medium">Adicionar Usuário</span>
           </button>
-          <button className="bg-gray-800 hover:bg-gray-700 text-white rounded-lg p-4 flex items-center gap-3 transition-colors">
+          <button 
+            onClick={() => alert('Funcionalidade de Nova Conversa em breve!')}
+            className="bg-gray-800 hover:bg-gray-700 text-white rounded-lg p-4 flex items-center gap-3 transition-colors"
+          >
             <MessageSquare className="h-5 w-5" />
             <span className="font-medium">Nova Conversa</span>
           </button>
-          <button className="bg-gray-800 hover:bg-gray-700 text-white rounded-lg p-4 flex items-center gap-3 transition-colors">
+          <button 
+            onClick={() => window.open('https://calendly.com', '_blank')}
+            className="bg-gray-800 hover:bg-gray-700 text-white rounded-lg p-4 flex items-center gap-3 transition-colors"
+          >
             <Calendar className="h-5 w-5" />
             <span className="font-medium">Agendar Reunião</span>
           </button>

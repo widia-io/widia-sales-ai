@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus,
@@ -38,6 +39,7 @@ import { useToast } from '@/hooks/use-toast'
 export default function UsersPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
   const { user: currentUser } = useAuthStore()
   const [searchTerm, setSearchTerm] = useState('')
   const [filterRole, setFilterRole] = useState<string>('all')
@@ -53,6 +55,17 @@ export default function UsersPage() {
   })
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
   const [newPassword, setNewPassword] = useState('')
+
+  // Check if we should open the create modal from URL params
+  useEffect(() => {
+    if (searchParams.get('action') === 'new') {
+      setShowCreateModal(true)
+      // Clean the URL after opening the modal
+      const url = new URL(window.location.href)
+      url.searchParams.delete('action')
+      window.history.replaceState({}, '', url.pathname)
+    }
+  }, [searchParams])
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery({
