@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -31,19 +31,46 @@ export default function LoginPage() {
   const login = useAuthStore((state) => state.login)
   const [isLoading, setIsLoading] = useState(false)
   
+  // Load saved credentials if "remember me" was checked
+  const getSavedCredentials = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('login-remember')
+      if (saved) {
+        try {
+          return JSON.parse(saved)
+        } catch {
+          return null
+        }
+      }
+    }
+    return null
+  }
+  
+  const savedCredentials = getSavedCredentials()
+  
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      email: savedCredentials?.email || '',
       password: '',
-      tenant_slug: '',
-      remember: false,
+      tenant_slug: savedCredentials?.tenant_slug || '',
+      remember: savedCredentials ? true : false,
     },
   })
+  
+  // Load saved credentials on mount
+  useEffect(() => {
+    if (savedCredentials) {
+      setValue('email', savedCredentials.email)
+      setValue('tenant_slug', savedCredentials.tenant_slug)
+      setValue('remember', true)
+    }
+  }, [])
   
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
@@ -57,6 +84,17 @@ export default function LoginPage() {
       
       // Store auth data
       login(response)
+      
+      // Save credentials if "remember me" is checked
+      if (data.remember) {
+        localStorage.setItem('login-remember', JSON.stringify({
+          email: data.email,
+          tenant_slug: data.tenant_slug,
+        }))
+      } else {
+        // Clear saved credentials if unchecked
+        localStorage.removeItem('login-remember')
+      }
       
       // Show success message
       toast({

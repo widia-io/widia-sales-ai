@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import Cookies from 'js-cookie'
 
 export interface User {
   id: string
@@ -42,6 +43,29 @@ interface AuthState {
   login: (data: { user: User; tenant: Tenant; token: string; refresh_token: string }) => void
   logout: () => void
   updateUser: (updates: Partial<User>) => void
+  checkAuth: () => Promise<void>
+  initializeAuth: () => void
+}
+
+// Custom storage that syncs with both localStorage and cookies
+const customStorage = {
+  getItem: (name: string) => {
+    const str = localStorage.getItem(name)
+    if (str) {
+      // Also set cookie for middleware to read
+      Cookies.set(name, str, { expires: 7, sameSite: 'lax' })
+    }
+    return str
+  },
+  setItem: (name: string, value: string) => {
+    localStorage.setItem(name, value)
+    // Also set cookie for middleware to read
+    Cookies.set(name, value, { expires: 7, sameSite: 'lax' })
+  },
+  removeItem: (name: string) => {
+    localStorage.removeItem(name)
+    Cookies.remove(name)
+  },
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -84,6 +108,8 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           isLoading: false,
         })
+        // Clear the cookie as well
+        Cookies.remove('auth-storage')
       },
       
       updateUser: (updates) => {
@@ -91,10 +117,30 @@ export const useAuthStore = create<AuthState>()(
           user: state.user ? { ...state.user, ...updates } : null,
         }))
       },
+      
+      checkAuth: async () => {
+        const state = useAuthStore.getState()
+        if (state.token) {
+          // Token exists, user is authenticated
+          set({ isAuthenticated: true, isLoading: false })
+        } else {
+          // No token, user is not authenticated
+          set({ isAuthenticated: false, isLoading: false })
+        }
+      },
+      
+      initializeAuth: () => {
+        // This will be called on app mount to set up the interceptor
+        const state = useAuthStore.getState()
+        if (state.token) {
+          // Token exists in storage after refresh
+          set({ isAuthenticated: true })
+        }
+      },
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => customStorage as any),
       partialize: (state) => ({
         user: state.user,
         tenant: state.tenant,

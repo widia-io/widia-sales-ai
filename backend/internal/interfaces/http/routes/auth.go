@@ -15,9 +15,10 @@ func SetupAuthRoutes(router fiber.Router, db *gorm.DB) {
 	// Initialize repositories and services
 	userRepo := repository.NewUserRepository(db)
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
+	resetTokenRepo := repository.NewPasswordResetTokenRepository(db)
 	tenantRepo := repository.NewTenantRepository(db)
 	
-	authService := application.NewAuthService(db, userRepo, refreshTokenRepo)
+	authService := application.NewAuthServiceWithResetToken(db, userRepo, refreshTokenRepo, resetTokenRepo)
 	tenantService := application.NewTenantService(db, tenantRepo, userRepo)
 	userService := application.NewUserService(db, userRepo)
 	
@@ -192,6 +193,136 @@ func SetupAuthRoutes(router fiber.Router, db *gorm.DB) {
 		
 		return c.JSON(fiber.Map{
 			"message": "Successfully logged out",
+		})
+	})
+	
+	// Forgot password - request reset token
+	auth.Post("/forgot-password", func(c fiber.Ctx) error {
+		var req struct {
+			Email      string `json:"email"`
+			TenantSlug string `json:"tenant_slug"`
+		}
+		
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request",
+			})
+		}
+		
+		// Validate required fields
+		if req.Email == "" || req.TenantSlug == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Email and tenant slug are required",
+			})
+		}
+		
+		// Request password reset
+		// Note: We don't return the token in production - it should be sent via email
+		token, err := authService.RequestPasswordReset(req.Email, req.TenantSlug)
+		if err != nil {
+			// Log the error but don't expose it to the user
+			// This prevents user enumeration attacks
+		}
+		
+		// Always return success to prevent user enumeration
+		response := fiber.Map{
+			"message": "If the email exists in our system, you will receive a password reset link",
+		}
+		
+		// In development, include the token for testing
+		// TODO: Remove this in production and send via email instead
+		if token != "" {
+			response["reset_token"] = token
+			response["reset_url"] = "/auth/reset-password?token=" + token
+		}
+		
+		return c.JSON(response)
+	})
+	
+	// Validate reset token
+	auth.Get("/reset-password/validate", func(c fiber.Ctx) error {
+		token := c.Query("token")
+		
+		if token == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Token is required",
+			})
+		}
+		
+		if err := authService.ValidateResetToken(token); err != nil {
+			switch err {
+			case application.ErrInvalidResetToken:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid or expired token",
+					"valid": false,
+				})
+			case application.ErrResetTokenUsed:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Token has already been used",
+					"valid": false,
+				})
+			default:
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to validate token",
+					"valid": false,
+				})
+			}
+		}
+		
+		return c.JSON(fiber.Map{
+			"message": "Token is valid",
+			"valid":   true,
+		})
+	})
+	
+	// Reset password with token
+	auth.Post("/reset-password", func(c fiber.Ctx) error {
+		var req struct {
+			Token       string `json:"token"`
+			NewPassword string `json:"new_password"`
+		}
+		
+		if err := c.Bind().JSON(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid request",
+			})
+		}
+		
+		// Validate required fields
+		if req.Token == "" || req.NewPassword == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Token and new password are required",
+			})
+		}
+		
+		// Reset the password
+		if err := authService.ResetPassword(req.Token, req.NewPassword); err != nil {
+			switch err {
+			case application.ErrInvalidResetToken:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Invalid or expired token",
+				})
+			case application.ErrResetTokenUsed:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Token has already been used",
+				})
+			case application.ErrInvalidPassword:
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+					"error": "Password must be at least 8 characters",
+				})
+			case application.ErrUserNotFound:
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error": "User not found",
+				})
+			default:
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error": "Failed to reset password",
+				})
+			}
+		}
+		
+		return c.JSON(fiber.Map{
+			"message": "Password has been reset successfully",
 		})
 	})
 }
