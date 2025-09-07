@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/widia/widia-connect/internal/domain"
+	"github.com/widia/widia-connect/internal/infrastructure/email"
 	"github.com/widia/widia-connect/internal/interfaces/http/middleware"
 	"gorm.io/gorm"
 )
@@ -28,6 +29,7 @@ type AuthService struct {
 	resetTokenRepo         domain.PasswordResetTokenRepository
 	refreshTokenExpiration time.Duration
 	resetTokenExpiration   time.Duration
+	emailService           *email.EmailService
 }
 
 func NewAuthService(
@@ -41,6 +43,7 @@ func NewAuthService(
 		refreshTokenRepo:       refreshTokenRepo,
 		refreshTokenExpiration: 7 * 24 * time.Hour, // 7 days
 		resetTokenExpiration:   1 * time.Hour,       // 1 hour
+		emailService:           email.NewEmailService(),
 	}
 }
 
@@ -58,6 +61,7 @@ func NewAuthServiceWithResetToken(
 		resetTokenRepo:         resetTokenRepo,
 		refreshTokenExpiration: 7 * 24 * time.Hour, // 7 days
 		resetTokenExpiration:   1 * time.Hour,       // 1 hour
+		emailService:           email.NewEmailService(),
 	}
 }
 
@@ -245,6 +249,22 @@ func (s *AuthService) RequestPasswordReset(email string, tenantSlug string) (str
 		if err := s.resetTokenRepo.Create(resetToken); err != nil {
 			return "", err
 		}
+	}
+	
+	// Send password reset email
+	if s.emailService != nil {
+		go func() {
+			println("Attempting to send password reset email to:", user.Email)
+			if err := s.emailService.SendPasswordResetEmail(user.Email, user.Name, token); err != nil {
+				// Log error but don't fail the request
+				// In production, you'd want proper logging here
+				println("Failed to send password reset email:", err.Error())
+			} else {
+				println("Password reset email sent successfully to:", user.Email)
+			}
+		}()
+	} else {
+		println("Email service is not configured")
 	}
 	
 	return token, nil
